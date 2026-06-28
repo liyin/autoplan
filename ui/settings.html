@@ -586,8 +586,16 @@
                           <svg class="icon" aria-hidden="true" focusable="false"><use href="#icon-terminal"></use></svg>
                           Claude CLI <span class="seg-note">-p 非交互</span>
                         </button>
+                        <button class="seg-opt" type="button" data-cli="opencode">
+                          <svg class="icon" aria-hidden="true" focusable="false"><use href="#icon-terminal"></use></svg>
+                          OpenCode CLI <span class="seg-note">非交互</span>
+                        </button>
+                        <button class="seg-opt" type="button" data-cli="qwenpaw">
+                          <svg class="icon" aria-hidden="true" focusable="false"><use href="#icon-terminal"></use></svg>
+                          QwenPaw CLI <span class="seg-note">智能体</span>
+                        </button>
                       </div>
-                      <span class="field-hint">Codex 支持会话复用与思考深度；Claude 仅覆盖非交互 <code>claude -p</code> 调用</span>
+                      <span class="field-hint">Codex 支持会话复用与思考深度；Claude/OpenCode 为非交互 CLI；QwenPaw 通过智能体对话执行任务</span>
                     </div>
 
                     <div class="field" id="effortField">
@@ -788,10 +796,14 @@
         opt.addEventListener('click', () => {
           cliSeg.querySelectorAll('.seg-opt').forEach((o) => o.classList.remove('active'));
           opt.classList.add('active');
-          const isClaude = opt.dataset.cli === 'claude';
-          effortField.style.display = isClaude ? 'none' : '';
-          providerNote.style.display = isClaude ? 'flex' : 'none';
-          cliCmdInput.placeholder = isClaude ? '留空用默认 claude' : '留空用默认 codex';
+          const cli = opt.dataset.cli;
+          const hideEffort = cli === 'claude' || cli === 'opencode' || cli === 'qwenpaw';
+          effortField.style.display = hideEffort ? 'none' : '';
+          providerNote.style.display = cli === 'claude' ? 'flex' : 'none';
+          if (cli === 'claude') cliCmdInput.placeholder = '留空用默认 claude';
+          else if (cli === 'opencode') cliCmdInput.placeholder = '留空用默认 opencode';
+          else if (cli === 'qwenpaw') cliCmdInput.placeholder = '留空用默认 qwenpaw';
+          else cliCmdInput.placeholder = '留空用默认 codex';
         });
       });
 

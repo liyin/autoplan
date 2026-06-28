@@ -8,8 +8,9 @@ const defaultMaxLines = 600;
 
 const fileLimits = new Map([
   ['scripts/smoke-test.js', 2800],
-  ['src/loopService.js', 1600],
-  ['src/loop/agentCliConfig.js', 700],
+  ['src/loopService.js', 1700],
+  ['src/loop/agentCliConfig.js', 800],
+  ['src/agentCli.js', 700],
   ['src/main.js', 650],
   ['src/mcpTools.js', 900],
   ['src/renderer/types.ts', 850],

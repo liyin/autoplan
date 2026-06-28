@@ -34,6 +34,7 @@ const {
   operationCodexSessionId,
   opencodeSessionContextFields,
   planAgentCliColumnValues,
+  qwenpawSessionContextFields,
   readFirstOwnValue,
   shortAgentCliSessionId,
   shortCodexSessionId,
@@ -894,11 +895,13 @@ class LoopService extends EventEmitter {
     const isCodexProvider = agentCliProvider === DEFAULT_AGENT_CLI_PROVIDER;
     const isClaudeProvider = agentCliProvider === 'claude';
     const isOpenCodeProvider = agentCliProvider === 'opencode';
+    const isQwenPawProvider = agentCliProvider === 'qwenpaw';
     const opencodePlanId = isOpenCodeProvider && operation.planId ? operation.planId : null;
     const requestedClaudeSessionId = isClaudeProvider ? requestedAgentCliSessionId(operation) : '';
     const hasClaudeSessionOption = isClaudeProvider && hasAnyOwnProperty(operation, CLAUDE_SESSION_INPUT_KEYS);
     const requestedOpenCodeSessionId = opencodePlanId ? this.planAgentCliSessionId(opencodePlanId) : '';
     const opencodeSessionTitle = opencodePlanId ? opencodePlanSessionTitle(projectIdForEmit, opencodePlanId) : '';
+    const requestedQwenPawSessionId = isQwenPawProvider && operation.planId ? this.planAgentCliSessionId(operation.planId) : '';
     const logDir = path.join(workspace, 'docs', 'progress', 'logs');
     fs.mkdirSync(logDir, { recursive: true });
     const prefix = `${timestampForPath()}_${safePart(label)}`;
@@ -941,6 +944,15 @@ class LoopService extends EventEmitter {
             agentCliSessionTitle: opencodeSessionTitle,
           }
         : {}),
+      ...(isQwenPawProvider
+        ? {
+            ...qwenpawSessionContextFields({
+              qwenpawSessionId: requestedQwenPawSessionId,
+              qwenpawSessionRequestedId: requestedQwenPawSessionId,
+              qwenpawSessionMode: requestedQwenPawSessionId ? 'resume' : 'new',
+            }),
+          }
+        : {}),
       logBuffer: '',
       activity: isCodexProvider ? new CodexActivityPrinter(200) : null,
       startedAt: nowIso(),
@@ -950,6 +962,7 @@ class LoopService extends EventEmitter {
     let capturedSessionId = '';
     let capturedClaudeSessionId = '';
     let capturedOpenCodeSessionId = requestedOpenCodeSessionId;
+    let capturedQwenPawSessionId = requestedQwenPawSessionId;
     let sessionScanBuffer = '';
     const stream = fs.createWriteStream(logFile, { encoding: 'utf8' });
     stream.on('error', (error) => {
@@ -986,6 +999,9 @@ class LoopService extends EventEmitter {
       const openCodeSessionId = normalizeAgentCliSessionId(
         attempt?.opencodeSessionId || attempt?.agentCliSessionId || capturedOpenCodeSessionId || (mode === 'resume' ? requestedOpenCodeSessionId : ''),
       );
+      const qwenPawSessionId = normalizeAgentCliSessionId(
+        attempt?.qwenpawSessionId || attempt?.agentCliSessionId || capturedQwenPawSessionId || (mode === 'resume' ? requestedQwenPawSessionId : ''),
+      );
       if (isClaudeProvider && claudeSessionId) {
         capturedClaudeSessionId = claudeSessionId;
         Object.assign(activeOperation, agentCliSessionContextFields('claude', {
@@ -1001,6 +1017,11 @@ class LoopService extends EventEmitter {
         activeOperation.agentCliSessionId = openCodeSessionId;
         activeOperation.opencodeSessionId = openCodeSessionId;
       }
+      if (isQwenPawProvider && qwenPawSessionId) {
+        capturedQwenPawSessionId = qwenPawSessionId;
+        activeOperation.agentCliSessionId = qwenPawSessionId;
+        activeOperation.qwenpawSessionId = qwenPawSessionId;
+      }
       const codexSessionFields = isCodexProvider
         ? codexSessionContextFields({
             codexSessionId: sessionId,
@@ -1014,6 +1035,13 @@ class LoopService extends EventEmitter {
             opencodeSessionId: openCodeSessionId,
             opencodeSessionRequestedId: requestedOpenCodeSessionId,
             opencodeSessionMode: mode,
+          })
+        : {};
+      const qwenPawSessionFields = isQwenPawProvider
+        ? qwenpawSessionContextFields({
+            qwenpawSessionId: qwenPawSessionId,
+            qwenpawSessionRequestedId: requestedQwenPawSessionId,
+            qwenpawSessionMode: mode,
           })
         : {};
       const claudeSessionFields = isClaudeProvider
@@ -1059,6 +1087,7 @@ class LoopService extends EventEmitter {
         ...codexSessionFields,
         ...claudeSessionFields,
         ...openCodeSessionFields,
+        ...qwenPawSessionFields,
         ...(isOpenCodeProvider && opencodeSessionTitle ? { opencodeSessionTitle, agentCliSessionTitle: opencodeSessionTitle } : {}),
       };
     };
@@ -1100,6 +1129,10 @@ class LoopService extends EventEmitter {
         agentCliOptions = {
           sessionId: mode === 'resume' ? capturedOpenCodeSessionId || requestedOpenCodeSessionId : '',
           title: opencodeSessionTitle,
+        };
+      } else if (isQwenPawProvider) {
+        agentCliOptions = {
+          sessionId: mode === 'resume' ? capturedQwenPawSessionId || requestedQwenPawSessionId : '',
         };
       }
       return runAgentCliAttempt({
@@ -1181,6 +1214,51 @@ class LoopService extends EventEmitter {
           this.updatePlanAgentCliSession(opencodePlanId, result.opencodeSessionId);
         } else if (result.sessionLookupError) {
           appendInternalLog(`OpenCode session lookup failed: ${result.sessionLookupError}`);
+        }
+        return result;
+      }
+
+      if (isQwenPawProvider) {
+        if (capturedQwenPawSessionId) {
+          this.addEvent(projectIdForEmit, 'qwenpaw.session.resume.started', `尝试恢复 QwenPaw 会话 ${shortAgentCliSessionId(capturedQwenPawSessionId)}`, {
+            ...qwenpawSessionContextFields({
+              qwenpawSessionId: capturedQwenPawSessionId,
+              qwenpawSessionRequestedId: capturedQwenPawSessionId,
+              qwenpawSessionMode: 'resume',
+            }),
+            label,
+            planId: operation.planId || null,
+            taskId: operation.taskId || null,
+          });
+          const resume = await runAttempt([], 'resume');
+          const resumeMissing = resume.exitCode !== 0;
+          if (!resumeMissing) {
+            const result = resultFor(resume, 'resume');
+            if (result.qwenpawSessionId && operation.planId) {
+              this.updatePlanAgentCliSession(operation.planId, result.qwenpawSessionId);
+            }
+            return result;
+          }
+          this.addEvent(projectIdForEmit, 'qwenpaw.session.resume.failed', `恢复 QwenPaw 会话失败，已回退新建：${shortAgentCliSessionId(capturedQwenPawSessionId)}`, {
+            ...qwenpawSessionContextFields({
+              qwenpawSessionRequestedId: capturedQwenPawSessionId,
+              qwenpawSessionMode: 'new',
+              qwenpawSessionState: 'fallback-new',
+            }),
+            label,
+            planId: operation.planId || null,
+            taskId: operation.taskId || null,
+            exitCode: resume.exitCode,
+            log: logFile,
+          });
+          if (operation.planId) this.updatePlanAgentCliSession(operation.planId, '');
+          appendInternalLog(`QwenPaw resume failed for session ${capturedQwenPawSessionId}; falling back to a new session.`);
+          capturedQwenPawSessionId = '';
+        }
+        const fresh = await runAttempt([], 'new');
+        const result = resultFor(fresh, 'new');
+        if (result.qwenpawSessionId && operation.planId) {
+          this.updatePlanAgentCliSession(operation.planId, result.qwenpawSessionId);
         }
         return result;
       }

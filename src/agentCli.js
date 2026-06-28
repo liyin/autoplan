@@ -3,13 +3,14 @@ const path = require('node:path');
 const { spawn } = require('node:child_process');
 
 const DEFAULT_AGENT_CLI_PROVIDER = 'codex';
-const AGENT_CLI_PROVIDERS = new Set([DEFAULT_AGENT_CLI_PROVIDER, 'claude', 'opencode']);
+const AGENT_CLI_PROVIDERS = new Set([DEFAULT_AGENT_CLI_PROVIDER, 'claude', 'opencode', 'qwenpaw']);
 const DEFAULT_CODEX_REASONING_EFFORT = 'medium';
 const CODEX_REASONING_EFFORTS = new Set(['low', DEFAULT_CODEX_REASONING_EFFORT, 'high', 'xhigh']);
 const AGENT_CLI_DISPLAY_NAMES = Object.freeze({
   codex: 'Codex',
   claude: 'Claude',
   opencode: 'OpenCode',
+  qwenpaw: 'QwenPaw',
 });
 const OPENCODE_SESSION_LOOKUP_MAX_COUNT = 50;
 
@@ -183,6 +184,42 @@ function opencodeCliArgs(options = {}) {
   return args;
 }
 
+// qwenpaw 通过 agents chat 子命令与其他智能体通信执行任务。
+// prompt 以 --text 参数传入，支持 --session-id 实现多轮对话复用。
+// 输出走 stdout（--json-output 为 JSON 格式），无 shell 包装。
+const DEFAULT_QWENPAW_AGENT_ID = 'autoplan';
+const QWENPAW_AGENT_ID_INPUT_KEYS = Object.freeze([
+  'qwenpawAgentId',
+  'qwenpaw_agent_id',
+  'agentId',
+  'agent_id',
+]);
+const QWENPAW_TO_AGENT_ID_INPUT_KEYS = Object.freeze([
+  'qwenpawToAgentId',
+  'qwenpaw_to_agent_id',
+  'toAgentId',
+  'to_agent_id',
+]);
+
+function normalizeQwenPawAgentId(value) {
+  const text = String(value || '').trim().toLowerCase();
+  return text || DEFAULT_QWENPAW_AGENT_ID;
+}
+
+function qwenpawCliArgs(options = {}) {
+  const args = ['agents', 'chat', '--mode', 'final', '--json-output'];
+  const agentId = normalizeQwenPawAgentId(
+    firstOwnSessionValue(options, QWENPAW_AGENT_ID_INPUT_KEYS),
+  );
+  const toAgentId = normalizeQwenPawAgentId(
+    firstOwnSessionValue(options, QWENPAW_TO_AGENT_ID_INPUT_KEYS),
+  );
+  const sessionId = normalizeAgentCliSessionId(options.sessionId || options.qwenpawSessionId);
+  args.push('--agent-id', agentId, '--to-agent', toAgentId);
+  if (sessionId) args.push('--session-id', sessionId);
+  return args;
+}
+
 function agentCliSpawnSpec(provider, command, lastFile, codexArgs, agentCliOptions = {}) {
   const normalizedProvider = normalizeAgentCliProvider(provider);
   const resolvedCommand = normalizeAgentCliCommand(command) || defaultAgentCliCommand(normalizedProvider);
@@ -215,6 +252,19 @@ function agentCliSpawnSpec(provider, command, lastFile, codexArgs, agentCliOptio
       promptSource: 'argument',
       agentCliSessionId: sessionId,
       agentCliSessionTitle: title,
+    };
+  }
+  if (normalizedProvider === 'qwenpaw') {
+    const sessionId = normalizeAgentCliSessionId(agentCliOptions.sessionId || agentCliOptions.qwenpawSessionId);
+    return {
+      provider: normalizedProvider,
+      agentCliProvider: normalizedProvider,
+      command: resolvedCommand,
+      args: qwenpawCliArgs(agentCliOptions),
+      lastFileSource: 'stdout',
+      useShell: false,
+      promptSource: 'argument',
+      agentCliSessionId: sessionId,
     };
   }
   return {
@@ -259,9 +309,14 @@ async function runAgentCliAttempt(options) {
   if (spawnSpec.agentCliSessionState) activeOperation.agentCliSessionState = spawnSpec.agentCliSessionState;
   if (spawnSpec.agentCliSessionTitle) activeOperation.agentCliSessionTitle = spawnSpec.agentCliSessionTitle;
 
-  // opencode 仅支持以位置参数传入 prompt，在构造命令行前追加，复用既有转义/引用逻辑。
+  // opencode/qwenpaw 仅支持以位置参数或 --text 参数传入 prompt，
+  // 在构造命令行前追加，复用既有转义/引用逻辑。
   if (spawnSpec.promptSource === 'argument') {
-    spawnSpec.args = [...spawnSpec.args, prompt];
+    if (spawnSpec.agentCliProvider === 'qwenpaw') {
+      spawnSpec.args = [...spawnSpec.args, '--text', prompt];
+    } else {
+      spawnSpec.args = [...spawnSpec.args, prompt];
+    }
   }
 
   const executionSpec = agentCliExecutionSpec(spawnSpec);
@@ -383,7 +438,11 @@ async function runAgentCliAttempt(options) {
   }
   if (agentCliSessionId && runtime.activeOperations.has(nextOperationKey)) {
     activeOperation.agentCliSessionId = agentCliSessionId;
-    activeOperation.opencodeSessionId = agentCliSessionId;
+    if (spawnSpec.agentCliProvider === 'opencode') {
+      activeOperation.opencodeSessionId = agentCliSessionId;
+    } else if (spawnSpec.agentCliProvider === 'qwenpaw') {
+      activeOperation.qwenpawSessionId = agentCliSessionId;
+    }
   }
   const errorMessage = timeoutMessage || (lastFileError
     ? readableAgentCliLastFileError({

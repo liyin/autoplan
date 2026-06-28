@@ -19,7 +19,7 @@ const tabs: Array<{ id: WorkspaceTab; label: string; icon: IconName }> = [
 export function agentCliConfigSummary(state?: ProjectState | null) {
   const provider = readAgentCliProvider(state);
   const providerLabel = agentCliProviderLabel(provider);
-  if (provider === 'claude') return providerLabel;
+  if (provider === 'claude' || provider === 'opencode' || provider === 'qwenpaw') return providerLabel;
   return `${providerLabel} · 思考${codexReasoningEffortLabel(readCodexReasoningEffort(state))}`;
 }
 

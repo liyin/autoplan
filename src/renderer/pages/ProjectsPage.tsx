@@ -257,9 +257,13 @@ export function ProjectsPage() {
                 >
                   <option value="codex">Codex CLI</option>
                   <option value="claude">Claude CLI</option>
+                  <option value="qwenpaw">QwenPaw CLI</option>
                 </select>
                 {draft.agentCliProvider === 'claude' ? (
                   <small className="field-hint">需本机已安装 claude CLI 并完成认证</small>
+                ) : null}
+                {draft.agentCliProvider === 'qwenpaw' ? (
+                  <small className="field-hint">需本机已安装 qwenpaw CLI 并完成认证</small>
                 ) : null}
               </label>
               <div className="modal-foot">

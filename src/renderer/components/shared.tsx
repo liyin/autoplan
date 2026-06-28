@@ -39,6 +39,7 @@ export function agentCliProviderLabel(provider?: string | null): string {
   const value = normalizeAgentCliProvider(provider);
   if (value === 'claude') return 'Claude';
   if (value === 'opencode') return 'OpenCode';
+  if (value === 'qwenpaw') return 'QwenPaw';
   return 'Codex';
 }
 
@@ -98,6 +99,7 @@ function normalizeAgentCliProvider(provider?: string | null): string {
   const value = String(provider || '').trim().toLowerCase();
   if (value === 'claude') return 'claude';
   if (value === 'opencode') return 'opencode';
+  if (value === 'qwenpaw') return 'qwenpaw';
   return 'codex';
 }
 

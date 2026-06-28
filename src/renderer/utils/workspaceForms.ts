@@ -27,6 +27,7 @@ export const agentCliOptions: AgentCliOption[] = [
   { value: 'codex', label: 'Codex CLI' },
   { value: 'claude', label: 'Claude CLI' },
   { value: 'opencode', label: 'OpenCode CLI' },
+  { value: 'qwenpaw', label: 'QwenPaw CLI' },
 ];
 
 export const codexReasoningOptions: AgentCliOption[] = [
@@ -46,6 +47,7 @@ export const agentCliOptionDetails: Array<SettingsChoiceOption<AgentCliProvider>
   { value: 'codex', label: 'Codex CLI', description: '默认后端，支持思考深度参数。' },
   { value: 'claude', label: 'Claude CLI', description: '使用本机 claude 命令，需提前认证。' },
   { value: 'opencode', label: 'OpenCode CLI', description: '使用本机 opencode 命令，需提前安装并认证。' },
+  { value: 'qwenpaw', label: 'QwenPaw CLI', description: '使用本机 qwenpaw 命令，需提前安装并认证。' },
 ];
 
 export const codexReasoningOptionDetails: Array<SettingsChoiceOption<CodexReasoningEffort>> = [
@@ -204,6 +206,7 @@ export function agentCliDefaultCommand(provider?: string | null) {
   const normalized = String(provider || '').trim().toLowerCase();
   if (normalized === 'claude') return 'claude';
   if (normalized === 'opencode') return 'opencode';
+  if (normalized === 'qwenpaw') return 'qwenpaw';
   return 'codex';
 }
 

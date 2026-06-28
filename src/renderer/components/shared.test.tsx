@@ -68,10 +68,11 @@ describe('shared OpenCode display helpers', () => {
 
 describe('settings choice metadata', () => {
   it('keeps CLI provider choices ready for segmented controls', () => {
-    expectEqual(agentCliOptionDetails.length, 3);
+    expectEqual(agentCliOptionDetails.length, 4);
     expectEqual(agentCliOptionDetails[0].value, 'codex');
     expectEqual(agentCliOptionDetails[1].value, 'claude');
     expectEqual(agentCliOptionDetails[2].value, 'opencode');
+    expectEqual(agentCliOptionDetails[3].value, 'qwenpaw');
     expect(agentCliOptionDetails.every((option) => option.description), 'CLI options should include descriptions');
   });
 

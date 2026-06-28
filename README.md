@@ -232,5 +232,3 @@ npm run package:win  # 打包 Windows 安装包
 
 > 真实的 Claude CLI 调用需要本机安装并认证 `claude`；真实 MCP 客户端连通性需手动验证。`npm run smoke` 通过 stub 覆盖后端路由、Agent CLI 会话隔离、Codex 思考深度参数转换和 MCP 工具写入核心分支，不依赖真实二进制或外部 MCP 客户端。
 
-
-

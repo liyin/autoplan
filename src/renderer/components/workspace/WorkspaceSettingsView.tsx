@@ -45,11 +45,13 @@ function scopeModeLabel(mode: ScopeFileOpenMode) {
 function agentCliNavLabel(provider: string) {
   if (provider === 'claude') return 'Claude';
   if (provider === 'opencode') return 'OpenCode';
+  if (provider === 'qwenpaw') return 'QwenPaw';
   return 'Codex';
 }
 
 function agentCliNonCodexHint(provider: string) {
   if (provider === 'opencode') return 'OpenCode CLI 不使用该配置';
+  if (provider === 'qwenpaw') return 'QwenPaw CLI 不使用该配置';
   return 'Claude CLI 不使用该配置';
 }
 
@@ -188,7 +190,7 @@ export function WorkspaceSettingsView({
               <div className="set-card">
                 <div className="set-card-head">
                   <h3>后端与命令</h3>
-                  <div className="set-card-hint">Codex / Claude / OpenCode Provider、思考深度与可执行命令</div>
+                  <div className="set-card-hint">Codex / Claude / OpenCode / QwenPaw Provider、思考深度与可执行命令</div>
                 </div>
                 <div className="set-card-body">
                   <label className="field">
@@ -215,6 +217,9 @@ export function WorkspaceSettingsView({
                     ) : null}
                     {loopForm.agentCliProvider === 'opencode' ? (
                       <span className="field-hint">需本机已安装 opencode CLI 并完成认证，默认命令为 opencode。</span>
+                    ) : null}
+                    {loopForm.agentCliProvider === 'qwenpaw' ? (
+                      <span className="field-hint">需本机已安装 qwenpaw CLI 并完成认证，默认命令为 qwenpaw。</span>
                     ) : null}
                   </label>
                   {isCodexProvider ? (
