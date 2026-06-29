@@ -1,7 +1,7 @@
 export type IntakeType = 'requirement' | 'feedback';
 export type WorkspaceTab = 'overview' | 'requirement' | 'feedback' | 'tasks' | 'events' | 'settings';
 export const DEFAULT_WORKSPACE_TAB: WorkspaceTab = 'requirement';
-export type AgentCliProvider = 'codex' | 'claude' | 'opencode' | 'qwenpaw' | string;
+export type AgentCliProvider = 'codex' | 'claude' | 'opencode' | 'qwenpaw' | 'qwenpaw-api' | string;
 export type CodexReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh' | string;
 
 export const PLAN_STATUS = {

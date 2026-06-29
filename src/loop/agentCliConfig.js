@@ -36,7 +36,7 @@ const AGENT_CLI_COMMAND_INPUT_KEYS = Object.freeze([
 ]);
 const AGENT_CLI_PROVIDER_CONTEXT_KEYS = Object.freeze([...AGENT_CLI_PROVIDER_INPUT_KEYS, 'provider']);
 const AGENT_CLI_COMMAND_CONTEXT_KEYS = Object.freeze([...AGENT_CLI_COMMAND_INPUT_KEYS, 'command']);
-const AGENT_CLI_SESSION_COLUMNS = Object.freeze(['agent_cli_session_id', 'codex_session_id', 'opencode_session_id', 'qwenpaw_session_id']);
+const AGENT_CLI_SESSION_COLUMNS = Object.freeze(['agent_cli_session_id', 'codex_session_id', 'opencode_session_id', 'qwenpaw_session_id', 'qwenpaw_api_session_id']);
 const AGENT_CLI_SESSION_CONTEXT_KEYS = Object.freeze([
   'agentCliSessionId',
   'agent_cli_session_id',
@@ -48,6 +48,8 @@ const AGENT_CLI_SESSION_CONTEXT_KEYS = Object.freeze([
   'opencode_session_id',
   'qwenpawSessionId',
   'qwenpaw_session_id',
+  'qwenpawApiSessionId',
+  'qwenpaw_api_session_id',
 ]);
 const AGENT_CLI_SESSION_REQUESTED_ID_CONTEXT_KEYS = Object.freeze([
   'agentCliSessionRequestedId',
@@ -60,6 +62,8 @@ const AGENT_CLI_SESSION_REQUESTED_ID_CONTEXT_KEYS = Object.freeze([
   'opencode_session_requested_id',
   'qwenpawSessionRequestedId',
   'qwenpaw_session_requested_id',
+  'qwenpawApiSessionRequestedId',
+  'qwenpaw_api_session_requested_id',
 ]);
 const AGENT_CLI_SESSION_MODE_CONTEXT_KEYS = Object.freeze([
   'agentCliSessionMode',
@@ -70,6 +74,8 @@ const AGENT_CLI_SESSION_MODE_CONTEXT_KEYS = Object.freeze([
   'opencode_session_mode',
   'qwenpawSessionMode',
   'qwenpaw_session_mode',
+  'qwenpawApiSessionMode',
+  'qwenpaw_api_session_mode',
 ]);
 const AGENT_CLI_SESSION_STATE_CONTEXT_KEYS = Object.freeze([
   'agentCliSessionState',
@@ -80,6 +86,8 @@ const AGENT_CLI_SESSION_STATE_CONTEXT_KEYS = Object.freeze([
   'opencode_session_state',
   'qwenpawSessionState',
   'qwenpaw_session_state',
+  'qwenpawApiSessionState',
+  'qwenpaw_api_session_state',
 ]);
 const AGENT_CLI_SESSION_LABEL_CONTEXT_KEYS = Object.freeze([
   'agentCliSessionLabel',
@@ -90,6 +98,8 @@ const AGENT_CLI_SESSION_LABEL_CONTEXT_KEYS = Object.freeze([
   'opencode_session_label',
   'qwenpawSessionLabel',
   'qwenpaw_session_label',
+  'qwenpawApiSessionLabel',
+  'qwenpaw_api_session_label',
 ]);
 const AGENT_CLI_SESSION_FALLBACK_CONTEXT_KEYS = Object.freeze([
   'agentCliSessionFallback',
@@ -100,8 +110,10 @@ const AGENT_CLI_SESSION_FALLBACK_CONTEXT_KEYS = Object.freeze([
   'opencode_session_fallback',
   'qwenpawSessionFallback',
   'qwenpaw_session_fallback',
+  'qwenpawApiSessionFallback',
+  'qwenpaw_api_session_fallback',
 ]);
-const AGENT_CLI_SESSION_PROVIDERS = new Set([DEFAULT_AGENT_CLI_PROVIDER, 'claude', 'opencode', 'qwenpaw']);
+const AGENT_CLI_SESSION_PROVIDERS = new Set([DEFAULT_AGENT_CLI_PROVIDER, 'claude', 'opencode', 'qwenpaw', 'qwenpaw-api']);
 const AGENT_CLI_SESSION_MODES = new Set(['new', 'resume', 'continue']);
 const LOOP_CONFIG_INPUT_KEYS = Object.freeze([
   'workspacePath',
@@ -325,6 +337,7 @@ function normalizeSessionProvider(source = {}, options = {}) {
   if (provider) return provider.toLowerCase();
   if (hasAnyOwnProperty(source, ['codexSessionId', 'codex_session_id'])) return DEFAULT_AGENT_CLI_PROVIDER;
   if (hasAnyOwnProperty(source, ['opencodeSessionId', 'opencode_session_id'])) return 'opencode';
+  if (hasAnyOwnProperty(source, ['qwenpawApiSessionId', 'qwenpaw_api_session_id'])) return 'qwenpaw-api';
   if (hasAnyOwnProperty(source, ['qwenpawSessionId', 'qwenpaw_session_id'])) return 'qwenpaw';
   return undefined;
 }
@@ -348,6 +361,7 @@ function isAgentCliSessionKeyForProvider(key, provider) {
   if (!normalizedProvider) return true;
   if (key.startsWith('codex') || key.startsWith('codex_')) return normalizedProvider === DEFAULT_AGENT_CLI_PROVIDER;
   if (key.startsWith('opencode') || key.startsWith('opencode_')) return normalizedProvider === 'opencode';
+  if (key.startsWith('qwenpawApi') || key.startsWith('qwenpaw_api_')) return normalizedProvider === 'qwenpaw-api';
   if (key.startsWith('qwenpaw') || key.startsWith('qwenpaw_')) return normalizedProvider === 'qwenpaw';
   return true;
 }

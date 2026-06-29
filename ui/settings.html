@@ -594,8 +594,12 @@
                           <svg class="icon" aria-hidden="true" focusable="false"><use href="#icon-terminal"></use></svg>
                           QwenPaw CLI <span class="seg-note">智能体</span>
                         </button>
+                        <button class="seg-opt" type="button" data-cli="qwenpaw-api">
+                          <svg class="icon" aria-hidden="true" focusable="false"><use href="#icon-server"></use></svg>
+                          QwenPaw API <span class="seg-note">HTTP</span>
+                        </button>
                       </div>
-                      <span class="field-hint">Codex 支持会话复用与思考深度；Claude/OpenCode 为非交互 CLI；QwenPaw 通过智能体对话执行任务</span>
+                      <span class="field-hint">Codex 支持会话复用与思考深度；Claude/OpenCode 为非交互 CLI；QwenPaw CLI 通过子进程调用；QwenPaw API 直连 HTTP 服务</span>
                     </div>
 
                     <div class="field" id="effortField">
@@ -637,6 +641,22 @@
                       <span class="field-label">CLI 命令路径 <span class="tag">可选</span></span>
                       <input class="field-input mono" value="" placeholder="留空用默认 codex" id="cliCmdInput" />
                       <span class="field-hint">后端在 PATH 中时留空即可；否则填写可执行文件的完整路径</span>
+                    </div>
+
+                    <div class="field" id="qwenpawApiHostField" style="display:none;">
+                      <span class="field-label">QwenPaw API 地址</span>
+                      <input class="field-input mono" value="127.0.0.1" placeholder="127.0.0.1" id="qwenpawApiHostInput" />
+                      <span class="field-hint">QwenPaw HTTP 服务监听地址，默认 127.0.0.1</span>
+                    </div>
+                    <div class="field" id="qwenpawApiPortField" style="display:none;">
+                      <span class="field-label">QwenPaw API 端口</span>
+                      <input class="field-input" type="number" value="8088" placeholder="8088" id="qwenpawApiPortInput" />
+                      <span class="field-hint">QwenPaw HTTP 服务监听端口，默认 8088</span>
+                    </div>
+                    <div class="field" id="qwenpawApiAgentIdField" style="display:none;">
+                      <span class="field-label">Agent ID</span>
+                      <input class="field-input" value="" placeholder="default" id="qwenpawApiAgentIdInput" />
+                      <span class="field-hint">目标智能体 ID，留空使用默认 agent</span>
                     </div>
                   </div>
                 </div>
@@ -792,17 +812,26 @@
       const effortField = document.getElementById('effortField');
       const providerNote = document.getElementById('providerNote');
       const cliCmdInput = document.getElementById('cliCmdInput');
+      const qwenpawApiHostField = document.getElementById('qwenpawApiHostField');
+      const qwenpawApiPortField = document.getElementById('qwenpawApiPortField');
+      const qwenpawApiAgentIdField = document.getElementById('qwenpawApiAgentIdField');
       cliSeg.querySelectorAll('.seg-opt').forEach((opt) => {
         opt.addEventListener('click', () => {
           cliSeg.querySelectorAll('.seg-opt').forEach((o) => o.classList.remove('active'));
           opt.classList.add('active');
           const cli = opt.dataset.cli;
-          const hideEffort = cli === 'claude' || cli === 'opencode' || cli === 'qwenpaw';
+          const hideEffort = cli === 'claude' || cli === 'opencode' || cli === 'qwenpaw' || cli === 'qwenpaw-api';
           effortField.style.display = hideEffort ? 'none' : '';
           providerNote.style.display = cli === 'claude' ? 'flex' : 'none';
+          // qwenpaw-api 显示 HTTP 配置字段
+          const showApiFields = cli === 'qwenpaw-api';
+          if (qwenpawApiHostField) qwenpawApiHostField.style.display = showApiFields ? '' : 'none';
+          if (qwenpawApiPortField) qwenpawApiPortField.style.display = showApiFields ? '' : 'none';
+          if (qwenpawApiAgentIdField) qwenpawApiAgentIdField.style.display = showApiFields ? '' : 'none';
           if (cli === 'claude') cliCmdInput.placeholder = '留空用默认 claude';
           else if (cli === 'opencode') cliCmdInput.placeholder = '留空用默认 opencode';
           else if (cli === 'qwenpaw') cliCmdInput.placeholder = '留空用默认 qwenpaw';
+          else if (cli === 'qwenpaw-api') cliCmdInput.placeholder = 'QwenPaw API 模式无需本地命令';
           else cliCmdInput.placeholder = '留空用默认 codex';
         });
       });

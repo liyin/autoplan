@@ -46,12 +46,14 @@ function agentCliNavLabel(provider: string) {
   if (provider === 'claude') return 'Claude';
   if (provider === 'opencode') return 'OpenCode';
   if (provider === 'qwenpaw') return 'QwenPaw';
+  if (provider === 'qwenpaw-api') return 'QwenPaw API';
   return 'Codex';
 }
 
 function agentCliNonCodexHint(provider: string) {
   if (provider === 'opencode') return 'OpenCode CLI 不使用该配置';
   if (provider === 'qwenpaw') return 'QwenPaw CLI 不使用该配置';
+  if (provider === 'qwenpaw-api') return 'QwenPaw API 模式不使用本地 CLI 命令';
   return 'Claude CLI 不使用该配置';
 }
 
@@ -220,6 +222,9 @@ export function WorkspaceSettingsView({
                     ) : null}
                     {loopForm.agentCliProvider === 'qwenpaw' ? (
                       <span className="field-hint">需本机已安装 qwenpaw CLI 并完成认证，默认命令为 qwenpaw。</span>
+                    ) : null}
+                    {loopForm.agentCliProvider === 'qwenpaw-api' ? (
+                      <span className="field-hint">直连 QwenPaw HTTP 服务（默认 127.0.0.1:8088），无需本地 CLI，节省子进程开销。</span>
                     ) : null}
                   </label>
                   {isCodexProvider ? (

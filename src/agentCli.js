@@ -1,16 +1,18 @@
 const fs = require('node:fs');
+const http = require('node:http');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 
 const DEFAULT_AGENT_CLI_PROVIDER = 'codex';
-const AGENT_CLI_PROVIDERS = new Set([DEFAULT_AGENT_CLI_PROVIDER, 'claude', 'opencode', 'qwenpaw']);
+const AGENT_CLI_PROVIDERS = new Set([DEFAULT_AGENT_CLI_PROVIDER, 'claude', 'opencode', 'qwenpaw', 'qwenpaw-api']);
 const DEFAULT_CODEX_REASONING_EFFORT = 'medium';
 const CODEX_REASONING_EFFORTS = new Set(['low', DEFAULT_CODEX_REASONING_EFFORT, 'high', 'xhigh']);
 const AGENT_CLI_DISPLAY_NAMES = Object.freeze({
   codex: 'Codex',
   claude: 'Claude',
   opencode: 'OpenCode',
-  qwenpaw: 'QwenPaw',
+  qwenpaw: 'QwenPaw (CLI)',
+  'qwenpaw-api': 'QwenPaw (API)',
 });
 const OPENCODE_SESSION_LOOKUP_MAX_COUNT = 50;
 
@@ -201,6 +203,15 @@ const QWENPAW_TO_AGENT_ID_INPUT_KEYS = Object.freeze([
   'to_agent_id',
 ]);
 
+// qwenpaw-api 通过 RESTful API 调用 QwenPaw，不走 CLI 子进程。
+// 直接 POST 到 QwenPaw HTTP 服务（默认 127.0.0.1:8088），
+// 复用常驻进程，避免子进程启动开销。
+const DEFAULT_QWENPAW_API_HOST = '127.0.0.1';
+const DEFAULT_QWENPAW_API_PORT = 8088;
+const DEFAULT_QWENPAW_API_USER_ID = 'autoplan';
+const QWENPAW_API_TIMEOUT_MS = 120 * 1000;
+const QWENPAW_API_PATH = '/api/console/chat';
+
 function normalizeQwenPawAgentId(value) {
   const text = String(value || '').trim().toLowerCase();
   return text || DEFAULT_QWENPAW_AGENT_ID;
@@ -267,6 +278,31 @@ function agentCliSpawnSpec(provider, command, lastFile, codexArgs, agentCliOptio
       agentCliSessionId: sessionId,
     };
   }
+  if (normalizedProvider === 'qwenpaw-api') {
+    const sessionId = normalizeAgentCliSessionId(agentCliOptions.sessionId || agentCliOptions.qwenpawApiSessionId);
+    const apiHost = agentCliOptions.qwenpawApiHost || DEFAULT_QWENPAW_API_HOST;
+    const apiPort = agentCliOptions.qwenpawApiPort || DEFAULT_QWENPAW_API_PORT;
+    const apiAgentId = normalizeQwenPawAgentId(
+      firstOwnSessionValue(agentCliOptions, [
+        'qwenpawApiAgentId', 'qwenpaw_api_agent_id',
+        'toAgentId', 'to_agent_id',
+      ]),
+    );
+    return {
+      provider: normalizedProvider,
+      agentCliProvider: normalizedProvider,
+      command: resolvedCommand,
+      args: [],
+      transport: 'http',
+      apiBaseUrl: `http://${apiHost}:${apiPort}`,
+      apiAgentId,
+      apiSessionId: sessionId,
+      lastFileSource: 'stdout',
+      useShell: false,
+      promptSource: 'http-body',
+      agentCliSessionId: sessionId,
+    };
+  }
   return {
     provider: normalizedProvider,
     agentCliProvider: normalizedProvider,
@@ -275,6 +311,47 @@ function agentCliSpawnSpec(provider, command, lastFile, codexArgs, agentCliOptio
     lastFileSource: 'cli',
     useShell: true,
     promptSource: 'stdin',
+  };
+}
+
+async function runQwenpawApiAttempt({
+  spawnSpec, prompt, lastFile, logFile, runtime, activeOperation,
+  operationKey, onOperationKey, registerRuntimeOperation, stream, onChunk, timeoutMs,
+}) {
+  const apiResult = await runQwenpawApi({
+    apiBaseUrl: spawnSpec.apiBaseUrl,
+    apiAgentId: spawnSpec.apiAgentId,
+    prompt,
+    sessionId: spawnSpec.apiSessionId,
+    timeoutMs,
+    onChunk: (text) => {
+      if (stream) safeWriteStream(stream, text);
+      if (typeof onChunk === 'function') onChunk(text);
+    },
+  });
+
+  if (apiResult.text) {
+    try {
+      fs.writeFileSync(lastFile, apiResult.text, 'utf8');
+    } catch {
+      // lastFile 写入失败不阻塞流程
+    }
+  }
+
+  const apiSessionId = normalizeAgentCliSessionId(apiResult.sessionId || spawnSpec.apiSessionId);
+  if (apiSessionId) activeOperation.agentCliSessionId = apiSessionId;
+
+  return {
+    exitCode: apiResult.error ? -1 : 0,
+    output: apiResult.text,
+    logFile,
+    lastFile,
+    provider: 'qwenpaw-api',
+    agentCliProvider: 'qwenpaw-api',
+    command: spawnSpec.command,
+    agentCliCommand: spawnSpec.command,
+    errorMessage: apiResult.error || '',
+    ...(apiSessionId ? { agentCliSessionId: apiSessionId } : {}),
   };
 }
 
@@ -317,6 +394,24 @@ async function runAgentCliAttempt(options) {
     } else {
       spawnSpec.args = [...spawnSpec.args, prompt];
     }
+  }
+
+  // qwenpaw-api 走 HTTP 直连，不走 spawn 子进程
+  if (spawnSpec.transport === 'http') {
+    return await runQwenpawApiAttempt({
+      spawnSpec,
+      prompt,
+      lastFile,
+      logFile,
+      runtime,
+      activeOperation,
+      operationKey,
+      onOperationKey,
+      registerRuntimeOperation,
+      stream,
+      onChunk,
+      timeoutMs,
+    });
   }
 
   const executionSpec = agentCliExecutionSpec(spawnSpec);
@@ -534,6 +629,147 @@ function normalizeComparablePath(value) {
   return text ? path.resolve(text).toLowerCase() : '';
 }
 
+/**
+ * 通过 QwenPaw RESTful API 执行一次对话。
+ * 不走 CLI 子进程，直接 POST /api/console/chat。
+ *
+ * @param {object} options
+ * @param {string} options.apiBaseUrl - 如 http://127.0.0.1:8088
+ * @param {string} options.apiAgentId - 目标 Agent ID，如 'default'
+ * @param {string} options.prompt - prompt 文本
+ * @param {string} [options.sessionId] - 会话 ID（空则新建会话）
+ * @param {string} [options.userId='autoplan'] - 用户 ID
+ * @param {number} [options.timeoutMs] - 超时毫秒
+ * @param {function} [options.onChunk] - 每收到 SSE 文本块时回调
+ * @returns {Promise<{ text: string, sessionId: string, error?: string }>}
+ */
+async function runQwenpawApi(options) {
+  const {
+    apiBaseUrl,
+    apiAgentId,
+    prompt,
+    sessionId = '',
+    userId = DEFAULT_QWENPAW_API_USER_ID,
+    timeoutMs = QWENPAW_API_TIMEOUT_MS,
+    onChunk,
+  } = options;
+
+  const url = new URL(QWENPAW_API_PATH, apiBaseUrl);
+  const requestBody = JSON.stringify({
+    input: [{
+      role: 'user',
+      content: [{ type: 'text', text: prompt }],
+    }],
+    session_id: sessionId || undefined,
+    user_id: userId,
+    channel: 'console',
+  });
+
+  return new Promise((resolve) => {
+    const req = http.request(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Agent-Id': apiAgentId,
+        'Content-Length': Buffer.byteLength(requestBody),
+      },
+      timeout: timeoutMs,
+    }, (res) => {
+      let fullText = '';
+      let responseSessionId = sessionId;
+      let errorMessage = '';
+      let buffer = '';
+
+      res.on('data', (chunk) => {
+        buffer += chunk.toString('utf8');
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith('data: ')) continue;
+
+          try {
+            const event = JSON.parse(trimmed.slice(6));
+
+            if (event.session_id) responseSessionId = event.session_id;
+
+            if (event.output && Array.isArray(event.output)) {
+              for (const item of event.output) {
+                if (item.role === 'assistant' && item.content) {
+                  for (const content of item.content) {
+                    if (content.type === 'text' && content.text) {
+                      fullText += content.text;
+                      if (typeof onChunk === 'function') onChunk(content.text);
+                    }
+                  }
+                }
+              }
+            }
+
+            if (event.status === 'failed' && event.error) {
+              errorMessage = event.error.message || 'QwenPaw API 调用失败';
+            }
+          } catch {
+            // 忽略单条 SSE 解析错误
+          }
+        }
+      });
+
+      res.on('error', (err) => {
+        if (!errorMessage) errorMessage = `QwenPaw API 响应流错误: ${err.message}`;
+      });
+
+      res.on('end', () => {
+        // flush buffer 中残留的最后一行（无换行符结尾的 SSE event）
+        if (buffer.trim()) {
+          const trimmed = buffer.trim();
+          if (trimmed.startsWith('data: ')) {
+            try {
+              const event = JSON.parse(trimmed.slice(6));
+              if (event.session_id) responseSessionId = event.session_id;
+              if (event.output && Array.isArray(event.output)) {
+                for (const item of event.output) {
+                  if (item.role === 'assistant' && item.content) {
+                    for (const content of item.content) {
+                      if (content.type === 'text' && content.text) {
+                        fullText += content.text;
+                        if (typeof onChunk === 'function') onChunk(content.text);
+                      }
+                    }
+                  }
+                }
+              }
+              if (event.status === 'failed' && event.error) {
+                errorMessage = event.error.message || 'QwenPaw API 调用失败';
+              }
+            } catch {
+              // 忽略解析错误
+            }
+          }
+        }
+        resolve({
+          text: fullText,
+          sessionId: responseSessionId,
+          ...(errorMessage ? { error: errorMessage } : {}),
+        });
+      });
+    });
+
+    req.on('error', (err) => {
+      resolve({ text: '', sessionId: '', error: `QwenPaw API 连接失败: ${err.message}` });
+    });
+
+    req.on('timeout', () => {
+      req.destroy();
+      resolve({ text: '', sessionId: sessionId || '', error: 'QwenPaw API 请求超时' });
+    });
+
+    req.write(requestBody);
+    req.end();
+  });
+}
+
 function safeWriteStream(stream, text) {
   if (!stream || stream.destroyed || stream.writableEnded || stream.writableFinished) return false;
   try {
@@ -654,4 +890,5 @@ module.exports = {
   normalizeAgentCliProvider,
   readableAgentCliError,
   runAgentCliAttempt,
+  runQwenpawApi,
 };

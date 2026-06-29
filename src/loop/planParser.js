@@ -39,8 +39,8 @@ function appendTask(service, helpers, projectId, planId, title) {
       'SELECT * FROM plan_tasks WHERE plan_id = ? ORDER BY sort_order DESC, id DESC LIMIT 1',
       [planId],
     );
+    const { isAcceptanceTask } = helpers;
     if (taskSectionIdx === -1) {
-  const { isAcceptanceTask } = helpers;
       content = `${content.trim()}\n\n## 任务计划\n${line}\n`;
     } else if (isAcceptanceTask(lastTask)) {
       content = insertTaskLineBeforeTask(content, lastTask, line);

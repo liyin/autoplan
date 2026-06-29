@@ -48,6 +48,7 @@ export const agentCliOptionDetails: Array<SettingsChoiceOption<AgentCliProvider>
   { value: 'claude', label: 'Claude CLI', description: '使用本机 claude 命令，需提前认证。' },
   { value: 'opencode', label: 'OpenCode CLI', description: '使用本机 opencode 命令，需提前安装并认证。' },
   { value: 'qwenpaw', label: 'QwenPaw CLI', description: '使用本机 qwenpaw 命令，需提前安装并认证。' },
+  { value: 'qwenpaw-api', label: 'QwenPaw API', description: '直连 QwenPaw HTTP 服务，无需本地 CLI。' },
 ];
 
 export const codexReasoningOptionDetails: Array<SettingsChoiceOption<CodexReasoningEffort>> = [
@@ -207,6 +208,7 @@ export function agentCliDefaultCommand(provider?: string | null) {
   if (normalized === 'claude') return 'claude';
   if (normalized === 'opencode') return 'opencode';
   if (normalized === 'qwenpaw') return 'qwenpaw';
+  if (normalized === 'qwenpaw-api') return 'qwenpaw-api';
   return 'codex';
 }
 
