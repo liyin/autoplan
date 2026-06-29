@@ -25,8 +25,16 @@ function syncPlanTasksFromMarkdown(service, planId, planFile) {
   }
 
   const syncedStatuses = [];
+  const batchSeenKeys = new Set();
   for (const task of tasks) {
-    const existing = existingByKey.get(task.key)?.shift();
+    let resolvedKey = task.key;
+    if (batchSeenKeys.has(task.key)) {
+      const fallback = `P${String(task.sortOrder).padStart(3, '0')}`;
+      resolvedKey = batchSeenKeys.has(fallback) ? `${fallback}-${Date.now()}` : fallback;
+    }
+    batchSeenKeys.add(resolvedKey);
+
+    const existing = existingByKey.get(resolvedKey)?.shift();
     const status = existing ? syncedTaskStatus(task.status, existing.status) : task.status;
     syncedStatuses.push(status);
     if (existing) {
@@ -40,7 +48,7 @@ function syncPlanTasksFromMarkdown(service, planId, planFile) {
       service.db.run(
         `INSERT INTO plan_tasks (plan_id, task_key, title, raw_line, scope, status, sort_order, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [planId, task.key, task.title, task.rawLine, task.scope, status, task.sortOrder, nowIso()],
+        [planId, resolvedKey, task.title, task.rawLine, task.scope, status, task.sortOrder, nowIso()],
       );
     }
   }
@@ -89,9 +97,15 @@ function parsePlanTasksFromMarkdown(markdown) {
   for (const line of lines) {
     const match = line.match(PLAN_TASK_LINE_RE);
     if (!match) continue;
-    const sortOrder = tasks.length + 1;
     const rawTitle = match[2].trim();
     const titleWithoutScope = stripPlanTaskScopeComment(rawTitle);
+    // 跳过没有规范 task key（如 P001:）的子 checkbox（如验收要点项）
+    // 只有包含 P00X: / P00X / TaskKey: 或 <!-- scope: --> 的行才算有效任务
+    const hasExplicitScope = PLAN_TASK_SCOPE_RE.test(line) || PLAN_TASK_SCOPE_COMMENT_RE.test(line);
+    const hasTaskKey = PLAN_TASK_KEY_RE.test(titleWithoutScope) || PLAN_TASK_KEY_RE.test(rawTitle);
+    if (!hasTaskKey && !hasExplicitScope) continue;
+
+    const sortOrder = tasks.length + 1;
     const parsedTitle = parsePlanTaskTitle(titleWithoutScope, sortOrder);
     const rawLine = ensurePlanTaskScopeComment(line, parsedTitle.validationLike ? 'validation' : 'unknown');
     tasks.push({
